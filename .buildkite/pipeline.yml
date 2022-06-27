@@ -1,0 +1,56 @@
+env:
+  BUILDKITE_CLEAN_CHECKOUT : true
+
+steps:
+  - input: ":buildkite: Select Database Environment"
+    fields:
+      - select: "ops | prod | tg | qa >"
+        key: "DATASOURCE"
+        options:
+          - label: "database_name"
+            value: "qa"
+  - wait
+  # - block: "DATASOURCE BACKUP STEP"
+  #   prompt: "Should we proceed with datasource backup"
+  #   fields:
+  #     - select: "yes/no"
+  #       key: "DB-BACKUP"
+  #       options:
+  #         - label: "yes"
+  #           value: "yes"
+  #         - label: "no"
+  #           value: "no"            
+  - label: ":hammer: DATABASE BACKUP"
+    command: "chmod +x .scripts/db_backup.sh && ./scripts/db_backup.sh"
+    plugins:
+      - seek-oss/aws-sm#v2.2.1:
+          env:
+            JDBC_URL:
+              secret-id: "liquibase-secret"  
+  - wait
+  - label: ":hammer: LIQUIBASE UPDATESQL PLAN"
+    command: "chmod +x ./scripts/plan.sh && ./scripts/plan.sh"
+
+    plugins:
+      - seek-oss/aws-sm#v2.2.1:
+          env:
+            JDBC_URL:
+              secret-id: "liquibase-secret"
+  - wait
+  - block: "Check Liquibase plan & Confirm for apply"
+    prompt: "Should we proceed with Liquibase update?"
+    fields:
+      - select: "yes/no"
+        key: "UPDATE"
+        options:
+          - label: "yes"
+            value: "yes"
+          - label: "no"
+            value: "no"
+  - label: ":hammer: LIQUIBASE UPDATE APPLY"
+    command: " chmod +x ./scripts/apply.sh && ./scripts/apply.sh"
+    plugins:
+      - seek-oss/aws-sm#v2.2.1:
+          env:
+            JDBC_URL:
+              secret-id: "liquibase-secret"
